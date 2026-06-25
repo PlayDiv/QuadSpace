@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meine Spielesammlung</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 40px 20px;
+            color: #333;
+            text-align: center;
+        }
+        
+        h1 {
+            margin-bottom: 40px;
+            font-size: clamp(2rem, 5vw, 3rem);
+            color: #2c3e50;
+        }
+
+        /* Das Raster-System für die Kacheln */
+        .grid-container {
+            display: grid;
+            /* Sorgt dafür, dass die Kacheln auf dem Handy untereinander und auf dem PC nebeneinander stehen */
+            grid-template-columns: repeat(auto-fit, minmax(280px, 320px));
+            gap: 25px;
+            justify-content: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Das Design einer einzelnen Kachel */
+        .game-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Hover-Effekt (Wenn man mit der Maus drüber fährt) */
+        .game-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        }
+
+        .game-icon {
+            font-size: 3.5rem;
+            margin-bottom: 15px;
+        }
+
+        .game-title {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .game-desc {
+            font-size: 0.95rem;
+            color: #666;
+            line-height: 1.5;
+            flex-grow: 1; /* Schiebt den Button immer nach ganz unten */
+        }
+
+        .play-btn {
+            margin-top: 20px;
+            background-color: #2196F3;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            width: 100%;
+            box-sizing: border-box;
+            transition: background-color 0.2s;
+        }
+
+        .game-card:hover .play-btn {
+            background-color: #1976D2; /* Wird beim Hovern leicht dunkler */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Meine Spielesammlung</h1>
+
+    <div class="grid-container">
+        
+        <a href="quadrat-dominanz/index.html" class="game-card">
+            <div class="game-icon">🟦</div>
+            <div class="game-title">Quadrat-Dominanz vs. KI</div>
+            <div class="game-desc">
+                Setze deine 8 Steine taktisch klug auf dem Feld ein und blockiere die KI, bis sie keinen Zug mehr machen kann.
+            </div>
+            <div class="play-btn">Spiel starten</div>
+        </a>
+        
+        <div class="game-card" style="opacity: 0.6; cursor: default;">
+            <div class="game-icon">⏳</div>
+            <div class="game-title">Bald verfügbar</div>
+            <div class="game-desc">
+                Hier entsteht bald ein neues Spiel. Schau später nochmal vorbei!
+            </div>
+            <div class="play-btn" style="background-color: #ccc;">Noch nicht spielbar</div>
+        </div>
+
+    </div>
+
+</body>
+</html>
