@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadrat-Dominanz VS Starke KI</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        #status {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            font-weight: bold;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .player1-turn { color: #2196F3; border-left: 5px solid #2196F3; }
+        .ai-turn { color: #E91E63; border-left: 5px solid #E91E63; animation: pulse 1s infinite alternate; }
+        .blocker-turn { color: #4CAF50; border-left: 5px solid #4CAF50; }
+        
+        @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+
+        #game-container { display: flex; gap: 40px; align-items: center; }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            border: 4px solid #333;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            position: relative;
+        }
+        .cell { width: 50px; height: 50px; box-sizing: border-box; }
+        .light { background-color: #f0d9b5; }
+        .dark { background-color: #b58863; }
+        
+        .cell.preview-valid { background-color: rgba(76, 175, 80, 0.6) !important; cursor: pointer; }
+        .cell.preview-invalid { background-color: rgba(244, 67, 54, 0.6) !important; cursor: not-allowed; }
+
+        .stone {
+            position: absolute;
+            border-radius: 4px; box-sizing: border-box;
+            border: 3px solid #fff;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5), 0 4px 6px rgba(0,0,0,0.3);
+            pointer-events: none;
+            transition: top 0.2s, left 0.2s;
+        }
+        .stone.p1 { width: 100px; height: 100px; background-color: #2196F3; }
+        .stone.p2 { width: 100px; height: 100px; background-color: #2c3e50; border-color: #e74c3c; }
+        .stone.blocker { width: 50px; height: 50px; background-color: #4CAF50; border-color: #fff; }
+
+        .inventory {
+            display: flex;
+            flex-direction: column; gap: 15px;
+            background: white; padding: 20px; border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); min-width: 220px;
+        }
+        .inv-count { font-weight: bold; }
+        button {
+            padding: 10px 20px;
+            font-size: 1rem; background-color: #333;
+            color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+
+    <h1>Quadrat-Dominanz vs. KI</h1>
+    <div id="status" class="blocker-turn">KI platziert Blockierstein...</div>
+
+    <div id="game-container">
+        <div id="board"></div>
+        
+        <div class="inventory">
+            <h3>Verbleibende Steine:</h3>
+            <div>Du (Blau): <span class="inv-count" id="p1-count">8</span> / 8</div>
+            <div>Computer (Rot): <span class="inv-count" id="p2-count">8</span> / 8</div>
+            <button onclick="resetGame()">Spiel neu starten</button>
+        </div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 8;
+        const STEINS_PRO_SPIELER = 8;
+        
+        let currentPlayer = 1; 
+        let p1StonesLeft = STEINS_PRO_SPIELER;
+        let p2StonesLeft = STEINS_PRO_SPIELER;
+        let isAiThinking = true; 
+        
+        // Bitboard Representation für extreme Performance
+        let currentBitboard = 0n;
+        const MOVES = [];
+        
+        // Generiere alle 49 möglichen 2x2 Züge als Bitmasken
+        for (let r = 0; r < 7; r++) {
+            for (let c = 0; c < 7; c++) {
+                // Distanz zur Mitte (für rudimentäres Move-Ordering)
+                let dr = r - 3;
+                let dc = c - 3;
+                let dist = dr*dr + dc*dc;
+                
+                MOVES.push({
+                    r, c,
+                    mask: (1n << BigInt(r*8 + c)) |
+                          (1n << BigInt(r*8 + c + 1)) |
+                          (1n << BigInt((r+1)*8 + c)) |
+                          (1n << BigInt((r+1)*8 + c + 1)),
+                    dist: dist
+                });
+            }
+        }
+        // Move-Ordering: Züge nah an der Mitte zuerst berechnen
+        MOVES.sort((a, b) => a.dist - b.dist);
+
+        const boardEl = document.getElementById('board');
+        const statusEl = document.getElementById('status');
+        const p1CountEl = document.getElementById('p1-count');
+        const p2CountEl = document.getElementById('p2-count');
+
+        function initBoard() {
+            boardEl.innerHTML = '';
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.classList.add((r + c) % 2 === 0 ? 'light' : 'dark');
+                    cell.addEventListener('mouseenter', () => { if(!isAiThinking && currentPlayer === 1) handleHover(r, c, true); });
+                    cell.addEventListener('mouseleave', () => { if(!isAiThinking && currentPlayer === 1) handleHover(r, c, false); });
+                    cell.addEventListener('click', () => { if(!isAiThinking && currentPlayer === 1) playerMove(r, c); });
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        function getValidMoves(bb) {
+            let valid = [];
+            for (let i = 0; i < MOVES.length; i++) {
+                if ((bb & MOVES[i].mask) === 0n) {
+                    valid.push(MOVES[i]);
+                }
+            }
+            return valid;
+        }
+
+        function isValidMoveUI(r, c, playerStones) {
+            if (r > 6 || c > 6 || playerStones <= 0) return false;
+            let move = MOVES.find(m => m.r === r && m.c === c);
+            if (!move) return false;
+            return (currentBitboard & move.mask) === 0n;
+        }
+
+        function handleHover(r, c, isEnter) {
+            const valid = isValidMoveUI(r, c, p1StonesLeft);
+            const cells = [{r, c}, {r: r+1, c}, {r, c: c+1}, {r: r+1, c: c+1}];
+            cells.forEach(pos => {
+                if (pos.r < BOARD_SIZE && pos.c < BOARD_SIZE) {
+                    const cellEl = boardEl.children[pos.r * BOARD_SIZE + pos.c];
+                    if (cellEl) {
+                        if (isEnter) cellEl.classList.add(valid ? 'preview-valid' : 'preview-invalid');
+                        else cellEl.classList.remove('preview-valid', 'preview-invalid');
+                    }
+                }
+            });
+        }
+
+        function renderStone(r, c, player) {
+            const stone = document.createElement('div');
+            if (player === 'blocker') {
+                stone.classList.add('stone', 'blocker');
+                stone.style.top = (r * 50) + 'px';
+                stone.style.left = (c * 50) + 'px';
+            } else {
+                stone.classList.add('stone', player === 1 ? 'p1' : 'p2');
+                stone.style.top = (r * 50) + 'px';
+                stone.style.left = (c * 50) + 'px';
+            }
+            boardEl.appendChild(stone);
+        }
+
+        function placeAiBlocker() {
+            // Zentrumsnaher Blockierstein (Positionen 2 bis 5)
+            const r = Math.floor(Math.random() * 4) + 2;
+            const c = Math.floor(Math.random() * 4) + 2;
+            
+            currentBitboard |= (1n << BigInt(r*8 + c));
+            renderStone(r, c, 'blocker');
+            
+            isAiThinking = false;
+            currentPlayer = 1;
+            statusEl.textContent = "Du (Blau) bist am Zug";
+            statusEl.className = "player1-turn";
+        }
+
+        function playerMove(r, c) {
+            if (!isValidMoveUI(r, c, p1StonesLeft)) return;
+            
+            let move = MOVES.find(m => m.r === r && m.c === c);
+            currentBitboard |= move.mask;
+            renderStone(r, c, 1);
+            p1StonesLeft--;
+            p1CountEl.textContent = p1StonesLeft;
+            handleHover(r, c, false);
+
+            currentPlayer = 2;
+            if (checkGameOver()) return;
+            statusEl.textContent = "Computer rechnet extrem stark...";
+            statusEl.className = "ai-turn";
+            isAiThinking = true;
+            
+            setTimeout(aiMove, 50);
+        }
+
+        // --- EXTREM STARKE KI LOGIK ---
+
+        const EXACT = 0, LOWERBOUND = 1, UPPERBOUND = 2;
+        let tt = new Map();
+        let isTimeout = false;
+        let nodesEvaluated = 0;
+
+        function alphaBeta(bb, depth, alpha, beta, isMaximizing, startTime, timeLimit) {
+            // Prüfe Zeitlimit nur alle 1024 Nodes (Performance Optimierung)
+            if ((nodesEvaluated++ & 1023) === 0) {
+                if (Date.now() - startTime > timeLimit) {
+                    isTimeout = true;
+                    return 0;
+                }
+            }
+
+            let ttEntry = tt.get(bb);
+            if (ttEntry !== undefined && ttEntry.depth >= depth) {
+                if (ttEntry.type === EXACT) return ttEntry.score;
+                if (ttEntry.type === LOWERBOUND && ttEntry.score >= beta) return ttEntry.score;
+                if (ttEntry.type === UPPERBOUND && ttEntry.score <= alpha) return ttEntry.score;
+            }
+
+            let valid = getValidMoves(bb);
+
+            // Terminal Node (Keine Züge mehr übrig)
+            if (valid.length === 0) {
+                // Wenn KI am Zug ist und keine Züge hat -> Verlust. (-10000)
+                // Durch Subtraktion/Addition der Tiefe bevorzugt die KI schnellere Siege und verzögert Verluste.
+                return isMaximizing ? -10000 - depth : 10000 + depth;
+            }
+
+            if (depth === 0) return 0; // Spiel noch offen, wir vertrauen der tiefen Suche statt fehlerhafter Heuristiken
+
+            let bestScore = isMaximizing ? -Infinity : Infinity;
+            let origAlpha = alpha;
+
+            for (let i = 0; i < valid.length; i++) {
+                let score = alphaBeta(bb | valid[i].mask, depth - 1, alpha, beta, !isMaximizing, startTime, timeLimit);
+                if (isTimeout) return 0;
+
+                if (isMaximizing) {
+                    bestScore = Math.max(bestScore, score);
+                    alpha = Math.max(alpha, score);
+                } else {
+                    bestScore = Math.min(bestScore, score);
+                    beta = Math.min(beta, score);
+                }
+                if (beta <= alpha) break; // Alpha-Beta Cutoff
+            }
+
+            if (!isTimeout) {
+                let type = EXACT;
+                if (bestScore <= origAlpha) type = UPPERBOUND;
+                else if (bestScore >= beta) type = LOWERBOUND;
+                tt.set(bb, { depth: depth, score: bestScore, type: type });
+            }
+
+            return bestScore;
+        }
+
+        function getBestMove(bb, timeLimit) {
+            let startTime = Date.now();
+            let valid = getValidMoves(bb);
+            if (valid.length === 1) return valid[0];
+
+            let bestMove = null;
+            let globalBestScore = -Infinity;
+
+            // Iterative Tiefensuche (Iterative Deepening)
+            for (let depth = 1; depth <= 64; depth++) {
+                let currentBestMove = null;
+                let bestScore = -Infinity;
+                let alpha = -Infinity;
+                let beta = Infinity;
+                isTimeout = false;
+
+                for (let i = 0; i < valid.length; i++) {
+                    let m = valid[i];
+                    let score = alphaBeta(bb | m.mask, depth - 1, alpha, beta, false, startTime, timeLimit);
+
+                    if (isTimeout) break;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        currentBestMove = m;
+                    }
+                    alpha = Math.max(alpha, bestScore);
+                }
+
+                if (isTimeout) {
+                    if (!bestMove) bestMove = currentBestMove || valid[0];
+                    break;
+                }
+
+                bestMove = currentBestMove;
+                globalBestScore = bestScore;
+
+                // Wenn ein erzwingbarer Sieg gefunden wurde, Suche abbrechen und Zug spielen
+                if (globalBestScore > 9000) break; 
+            }
+            return bestMove;
+        }
+
+        function aiMove() {
+            const validMoves = getValidMoves(currentBitboard);
+            if (validMoves.length === 0) {
+                isAiThinking = false;
+                checkGameOver();
+                return;
+            }
+
+            tt.clear(); // RAM schonen
+            nodesEvaluated = 0;
+            
+            // Die KI denkt für maximal 1200 Millisekunden nach
+            const bestMove = getBestMove(currentBitboard, 1200);
+
+            currentBitboard |= bestMove.mask;
+            renderStone(bestMove.r, bestMove.c, 2);
+            p2StonesLeft--;
+            p2CountEl.textContent = p2StonesLeft;
+
+            isAiThinking = false;
+            currentPlayer = 1;
+            checkGameOver();
+        }
+
+        function checkGameOver() {
+            const currentMoves = getValidMoves(currentBitboard).length;
+            
+            if (currentPlayer === 1 && p1StonesLeft <= 0 && currentMoves > 0) {
+                statusEl.textContent = "💥 SPIEL ENDE! Du hast keine Steine mehr. Der Computer gewinnt!";
+                endGameStyle("#E91E63");
+                return true;
+            }
+            if (currentPlayer === 2 && p2StonesLeft <= 0 && currentMoves > 0) {
+                statusEl.textContent = "🎉 SIEG! Der Computer hat keine Steine mehr. Du hast gewonnen!";
+                endGameStyle("#4CAF50");
+                return true;
+            }
+
+            if (currentMoves === 0) {
+                if (currentPlayer === 1) {
+                    statusEl.textContent = "💥 SPIEL ENDE! Du kannst keinen Stein mehr legen. Computer gewinnt!";
+                    endGameStyle("#E91E63");
+                } else {
+                    statusEl.textContent = "🎉 SIEG! Computer kann nicht mehr legen. Du hast gewonnen!";
+                    endGameStyle("#4CAF50");
+                }
+                return true;
+            }
+            
+            if (currentPlayer === 1) {
+                statusEl.textContent = "Du (Blau) bist am Zug";
+                statusEl.className = "player1-turn";
+            }
+            return false;
+        }
+
+        function endGameStyle(color) {
+            statusEl.className = "";
+            statusEl.style.backgroundColor = color;
+            statusEl.style.color = "white";
+            boardEl.style.pointerEvents = "none";
+        }
+
+        function resetGame() {
+            currentBitboard = 0n;
+            currentPlayer = 1;
+            p1StonesLeft = STEINS_PRO_SPIELER;
+            p2StonesLeft = STEINS_PRO_SPIELER;
+            isAiThinking = true; 
+            
+            p1CountEl.textContent = STEINS_PRO_SPIELER;
+            p2CountEl.textContent = STEINS_PRO_SPIELER;
+            boardEl.style.pointerEvents = "auto";
+            statusEl.style.backgroundColor = "#fff";
+            statusEl.style.color = "";
+            statusEl.className = "blocker-turn";
+            statusEl.textContent = "KI platziert Blockierstein...";
+            
+            initBoard();
+            setTimeout(placeAiBlocker, 600); 
+        }
+
+        // Start
+        initBoard();
+        setTimeout(placeAiBlocker, 600);
+    </script>
+</body>
+</html>
