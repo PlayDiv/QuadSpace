@@ -14,9 +14,14 @@
             margin: 0;
             padding: 20px;
         }
-        h1 { color: #333; margin-bottom: 10px; }
+        h1 { 
+            color: #333; 
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: clamp(1.5rem, 4vw, 2.5rem); /* Responsive Schriftgröße */
+        }
         #status {
-            font-size: 1.2rem;
+            font-size: clamp(1rem, 3vw, 1.2rem);
             margin-bottom: 15px;
             font-weight: bold;
             padding: 8px 16px;
@@ -24,6 +29,10 @@
             background-color: #fff;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             transition: background-color 0.3s, color 0.3s;
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
         }
         .player1-turn { color: #2196F3; border-left: 5px solid #2196F3; }
         .ai-turn { color: #E91E63; border-left: 5px solid #E91E63; animation: pulse 1s infinite alternate; }
@@ -31,16 +40,43 @@
         
         @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
 
-        #game-container { display: flex; gap: 40px; align-items: center; }
+        #game-container { 
+            display: flex; 
+            flex-direction: column; /* Auf Handys untereinander */
+            gap: 20px; 
+            align-items: center; 
+            width: 100%;
+            max-width: 800px;
+        }
+
+        /* Auf größeren Bildschirmen (ab 600px) nebeneinander */
+        @media (min-width: 600px) {
+            #game-container {
+                flex-direction: row;
+                align-items: flex-start;
+                justify-content: center;
+                gap: 40px;
+            }
+        }
+
         #board {
             display: grid;
-            grid-template-columns: repeat(8, 50px);
-            grid-template-rows: repeat(8, 50px);
+            grid-template-columns: repeat(8, 1fr); /* 8 gleiche Spaltenanteile */
+            grid-template-rows: repeat(8, 1fr);    /* 8 gleiche Zeilenanteile */
             border: 4px solid #333;
             box-shadow: 0 8px 16px rgba(0,0,0,0.2);
             position: relative;
+            width: 100%;           /* Passt sich dem Container an */
+            max-width: 450px;      /* Wird auf dem PC nicht gigantisch */
+            aspect-ratio: 1 / 1;   /* Hält das Brett immer quadratisch */
+            box-sizing: border-box;
         }
-        .cell { width: 50px; height: 50px; box-sizing: border-box; }
+
+        .cell { 
+            width: 100%; 
+            height: 100%; 
+            box-sizing: border-box; 
+        }
         .light { background-color: #f0d9b5; }
         .dark { background-color: #b58863; }
         
@@ -49,28 +85,53 @@
 
         .stone {
             position: absolute;
-            border-radius: 4px; box-sizing: border-box;
+            border-radius: 4px; 
+            box-sizing: border-box;
             border: 3px solid #fff;
             box-shadow: inset 0 0 10px rgba(0,0,0,0.5), 0 4px 6px rgba(0,0,0,0.3);
             pointer-events: none;
             transition: top 0.2s, left 0.2s;
         }
-        .stone.p1 { width: 100px; height: 100px; background-color: #2196F3; }
-        .stone.p2 { width: 100px; height: 100px; background-color: #2c3e50; border-color: #e74c3c; }
-        .stone.blocker { width: 50px; height: 50px; background-color: #4CAF50; border-color: #fff; }
+        
+        /* Größen nun in Prozent, bezogen auf das responsive Brett */
+        .stone.p1, .stone.p2 { 
+            width: 25%;   /* 2 von 8 Feldern = 25% */
+            height: 25%; 
+        }
+        .stone.p1 { background-color: #2196F3; }
+        .stone.p2 { background-color: #2c3e50; border-color: #e74c3c; }
+        
+        .stone.blocker { 
+            width: 12.5%; /* 1 von 8 Feldern = 12.5% */
+            height: 12.5%; 
+            background-color: #4CAF50; 
+            border-color: #fff; 
+        }
 
         .inventory {
             display: flex;
-            flex-direction: column; gap: 15px;
-            background: white; padding: 20px; border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05); min-width: 220px;
+            flex-direction: column; 
+            gap: 15px;
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+            width: 100%;
+            max-width: 300px;
+            box-sizing: border-box;
         }
         .inv-count { font-weight: bold; }
         button {
             padding: 10px 20px;
-            font-size: 1rem; background-color: #333;
-            color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 15px;
+            font-size: 1rem; 
+            background-color: #333;
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin-top: 15px;
             transition: opacity 0.2s;
+            width: 100%;
         }
         button:hover { opacity: 0.9; }
     </style>
@@ -87,6 +148,7 @@
             <h3>Verbleibende Steine:</h3>
             <div>Du (Blau): <span class="inv-count" id="p1-count">8</span> / 8</div>
             <div>Computer (Rot): <span class="inv-count" id="p2-count">8</span> / 8</div>
+  
             <button onclick="resetGame()">Spiel neu starten</button>
         </div>
     </div>
@@ -98,20 +160,15 @@
         let currentPlayer = 1; 
         let p1StonesLeft = STEINS_PRO_SPIELER;
         let p2StonesLeft = STEINS_PRO_SPIELER;
-        let isAiThinking = true; 
-        
-        // Bitboard Representation für extreme Performance
+        let isAiThinking = true;
         let currentBitboard = 0n;
         const MOVES = [];
         
-        // Generiere alle 49 möglichen 2x2 Züge als Bitmasken
         for (let r = 0; r < 7; r++) {
             for (let c = 0; c < 7; c++) {
-                // Distanz zur Mitte (für rudimentäres Move-Ordering)
                 let dr = r - 3;
                 let dc = c - 3;
                 let dist = dr*dr + dc*dc;
-                
                 MOVES.push({
                     r, c,
                     mask: (1n << BigInt(r*8 + c)) |
@@ -122,9 +179,8 @@
                 });
             }
         }
-        // Move-Ordering: Züge nah an der Mitte zuerst berechnen
         MOVES.sort((a, b) => a.dist - b.dist);
-
+        
         const boardEl = document.getElementById('board');
         const statusEl = document.getElementById('status');
         const p1CountEl = document.getElementById('p1-count');
@@ -178,26 +234,25 @@
 
         function renderStone(r, c, player) {
             const stone = document.createElement('div');
+            // WICHTIG: Die Platzierung nutzt nun Prozente statt Pixel
             if (player === 'blocker') {
                 stone.classList.add('stone', 'blocker');
-                stone.style.top = (r * 50) + 'px';
-                stone.style.left = (c * 50) + 'px';
+                stone.style.top = (r * 12.5) + '%';
+                stone.style.left = (c * 12.5) + '%';
             } else {
                 stone.classList.add('stone', player === 1 ? 'p1' : 'p2');
-                stone.style.top = (r * 50) + 'px';
-                stone.style.left = (c * 50) + 'px';
+                stone.style.top = (r * 12.5) + '%';
+                stone.style.left = (c * 12.5) + '%';
             }
             boardEl.appendChild(stone);
         }
 
         function placeAiBlocker() {
-            // Zentrumsnaher Blockierstein (Positionen 2 bis 5)
             const r = Math.floor(Math.random() * 4) + 2;
             const c = Math.floor(Math.random() * 4) + 2;
             
             currentBitboard |= (1n << BigInt(r*8 + c));
             renderStone(r, c, 'blocker');
-            
             isAiThinking = false;
             currentPlayer = 1;
             statusEl.textContent = "Du (Blau) bist am Zug";
@@ -206,7 +261,6 @@
 
         function playerMove(r, c) {
             if (!isValidMoveUI(r, c, p1StonesLeft)) return;
-            
             let move = MOVES.find(m => m.r === r && m.c === c);
             currentBitboard |= move.mask;
             renderStone(r, c, 1);
@@ -223,15 +277,12 @@
             setTimeout(aiMove, 50);
         }
 
-        // --- EXTREM STARKE KI LOGIK ---
-
         const EXACT = 0, LOWERBOUND = 1, UPPERBOUND = 2;
         let tt = new Map();
         let isTimeout = false;
         let nodesEvaluated = 0;
 
         function alphaBeta(bb, depth, alpha, beta, isMaximizing, startTime, timeLimit) {
-            // Prüfe Zeitlimit nur alle 1024 Nodes (Performance Optimierung)
             if ((nodesEvaluated++ & 1023) === 0) {
                 if (Date.now() - startTime > timeLimit) {
                     isTimeout = true;
@@ -247,15 +298,11 @@
             }
 
             let valid = getValidMoves(bb);
-
-            // Terminal Node (Keine Züge mehr übrig)
             if (valid.length === 0) {
-                // Wenn KI am Zug ist und keine Züge hat -> Verlust. (-10000)
-                // Durch Subtraktion/Addition der Tiefe bevorzugt die KI schnellere Siege und verzögert Verluste.
                 return isMaximizing ? -10000 - depth : 10000 + depth;
             }
 
-            if (depth === 0) return 0; // Spiel noch offen, wir vertrauen der tiefen Suche statt fehlerhafter Heuristiken
+            if (depth === 0) return 0;
 
             let bestScore = isMaximizing ? -Infinity : Infinity;
             let origAlpha = alpha;
@@ -271,7 +318,7 @@
                     bestScore = Math.min(bestScore, score);
                     beta = Math.min(beta, score);
                 }
-                if (beta <= alpha) break; // Alpha-Beta Cutoff
+                if (beta <= alpha) break;
             }
 
             if (!isTimeout) {
@@ -291,21 +338,19 @@
 
             let bestMove = null;
             let globalBestScore = -Infinity;
-
-            // Iterative Tiefensuche (Iterative Deepening)
+            
             for (let depth = 1; depth <= 64; depth++) {
                 let currentBestMove = null;
                 let bestScore = -Infinity;
                 let alpha = -Infinity;
                 let beta = Infinity;
                 isTimeout = false;
-
+                
                 for (let i = 0; i < valid.length; i++) {
                     let m = valid[i];
                     let score = alphaBeta(bb | m.mask, depth - 1, alpha, beta, false, startTime, timeLimit);
 
                     if (isTimeout) break;
-
                     if (score > bestScore) {
                         bestScore = score;
                         currentBestMove = m;
@@ -321,8 +366,7 @@
                 bestMove = currentBestMove;
                 globalBestScore = bestScore;
 
-                // Wenn ein erzwingbarer Sieg gefunden wurde, Suche abbrechen und Zug spielen
-                if (globalBestScore > 9000) break; 
+                if (globalBestScore > 9000) break;
             }
             return bestMove;
         }
@@ -335,12 +379,10 @@
                 return;
             }
 
-            tt.clear(); // RAM schonen
+            tt.clear();
             nodesEvaluated = 0;
-            
-            // Die KI denkt für maximal 1200 Millisekunden nach
             const bestMove = getBestMove(currentBitboard, 1200);
-
+            
             currentBitboard |= bestMove.mask;
             renderStone(bestMove.r, bestMove.c, 2);
             p2StonesLeft--;
@@ -399,6 +441,7 @@
             
             p1CountEl.textContent = STEINS_PRO_SPIELER;
             p2CountEl.textContent = STEINS_PRO_SPIELER;
+            
             boardEl.style.pointerEvents = "auto";
             statusEl.style.backgroundColor = "#fff";
             statusEl.style.color = "";
@@ -406,7 +449,7 @@
             statusEl.textContent = "KI platziert Blockierstein...";
             
             initBoard();
-            setTimeout(placeAiBlocker, 600); 
+            setTimeout(placeAiBlocker, 600);
         }
 
         // Start
